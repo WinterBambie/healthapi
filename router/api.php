@@ -1,11 +1,17 @@
 <?php
+// Suprimir warnings/notices para que no contaminen el JSON
+error_reporting(0);
+ini_set('display_errors', '0');
+
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
+header("Content-Type: application/json; charset=UTF-8");
 
+// Pre-flight CORS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200); exit();
+    http_response_code(200);
+    exit;
 }
 
 require_once __DIR__ . '/../config/database.php';
@@ -13,76 +19,96 @@ require_once __DIR__ . '/../config/BaseController.php';
 require_once __DIR__ . '/../config/JwtHelper.php';
 require_once __DIR__ . '/../controllers/AuthController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
-require_once __DIR__ . '/../controllers/AppointmentController.php';
+require_once __DIR__ . '/../controllers/PatientController.php';
+require_once __DIR__ . '/../controllers/DoctorController.php';
 
-$action = $_GET['action'] ?? '';
-
+$action        = $_GET['action'] ?? '';
 $publicActions = ['login', 'register', 'documentTypes'];
 
+// ── Autenticación ─────────────────────────────────────────────────────────────
 if (!in_array($action, $publicActions)) {
     $headers = getallheaders();
     $auth    = $headers['Authorization'] ?? $headers['authorization'] ?? '';
     $token   = str_replace('Bearer ', '', trim($auth));
+
     if (!$token) {
         http_response_code(401);
-        echo json_encode(["status" => "error", "message" => "Token requerido"]);
-        exit();
+        echo json_encode(["status" => "error", "message" => "Token requerido."]);
+        exit;
     }
+
     $currentUser = JwtHelper::verify($token);
     if (!$currentUser) {
         http_response_code(401);
-        echo json_encode(["status" => "error", "message" => "Token inválido o expirado"]);
-        exit();
+        echo json_encode(["status" => "error", "message" => "Token inválido o expirado."]);
+        exit;
     }
 }
 
-$authCtrl  = new AuthController();
-$adminCtrl = new AdminController();
-$apptCtrl  = new AppointmentController();
+// ── Instanciar controladores ──────────────────────────────────────────────────
+$authCtrl    = new AuthController();
+$adminCtrl   = new AdminController();
+$patientCtrl = new PatientController();
+$doctorCtrl  = new DoctorController();
 
+// ── Rutas ─────────────────────────────────────────────────────────────────────
 switch ($action) {
 
-    // ── Auth ──────────────────────────────────────────────────────────────────
-    case 'login':           $authCtrl->login();            break;
-    case 'register':        $authCtrl->registerPatient();  break;
-    case 'documentTypes':   $authCtrl->getDocumentTypes(); break;
+    // Auth
+    case 'login':         $authCtrl->login();            break;
+    case 'register':      $authCtrl->registerPatient();  break;
+    case 'documentTypes': $authCtrl->getDocumentTypes(); break;
 
-    // ── Stats ─────────────────────────────────────────────────────────────────
-    case 'adminStats':      $adminCtrl->getStats();        break;
+    // Admin — stats
+    case 'adminStats':    $adminCtrl->getStats();        break;
 
-    // ── Pacientes ─────────────────────────────────────────────────────────────
-    case 'adminPatients':   $adminCtrl->getPatients();     break;
-    case 'updatePatient':   $adminCtrl->updatePatient();   break;
-    case 'deletePatient':   $adminCtrl->deletePatient();   break;
+    // Admin — pacientes
+    case 'adminPatients': $adminCtrl->getPatients();     break;
+    case 'deletePatient': $adminCtrl->deletePatient();   break;
 
-    // ── Doctores ─────────────────────────────────────────────────────────────
-    case 'adminDoctors':    $adminCtrl->getDoctors();      break;
-    case 'createDoctor':    $adminCtrl->createDoctor();    break;
-    case 'updateDoctor':    $adminCtrl->updateDoctor();    break;
-    case 'deleteDoctor':    $adminCtrl->deleteDoctor();    break;
+    // Admin — doctores
+    case 'adminDoctors':  $adminCtrl->getDoctors();      break;
+    case 'createDoctor':  $adminCtrl->createDoctor();    break;
+    case 'updateDoctor':  $adminCtrl->updateDoctor();    break;
+    case 'deleteDoctor':  $adminCtrl->deleteDoctor();    break;
 
-    // ── Citas ─────────────────────────────────────────────────────────────────
+    // Admin — citas
     case 'adminAppointments':       $adminCtrl->getAppointments();         break;
     case 'updateAppointmentStatus': $adminCtrl->updateAppointmentStatus(); break;
     case 'deleteAppointment':       $adminCtrl->deleteAppointment();       break;
-    case 'createAppointment':       $apptCtrl->create();                   break;
-    case 'getAppointmentsByPatient':$apptCtrl->getByPatient();             break;
-    case 'getAppointmentsByDoctor': $apptCtrl->getByDoctor();              break;
-    case 'cancelAppointment':       $apptCtrl->cancel();                   break;
 
-    // ── Horarios ─────────────────────────────────────────────────────────────
-    case 'adminSchedules':    $adminCtrl->getSchedules();      break;
-    case 'availableSlots':    $adminCtrl->getAvailableSlots(); break;
-    case 'createSchedule':    $adminCtrl->createSchedule();    break;
-    case 'updateSchedule':    $adminCtrl->updateSchedule();    break;
-    case 'deleteSchedule':    $adminCtrl->deleteSchedule();    break;
+    // Admin — horarios
+    case 'adminSchedules': $adminCtrl->getSchedules();      break;
+    case 'availableSlots': $adminCtrl->getAvailableSlots(); break;
+    case 'createSchedule': $adminCtrl->createSchedule();    break;
+    case 'updateSchedule': $adminCtrl->updateSchedule();    break;
+    case 'deleteSchedule': $adminCtrl->deleteSchedule();    break;
 
-    // ── Auxiliares ────────────────────────────────────────────────────────────
-    case 'getSessions':       $adminCtrl->getSessions();    break;
-    case 'adminSpecialties':  $adminCtrl->getSpecialties(); break;
+    // Admin — auxiliares
+    case 'getSessions':      $adminCtrl->getSessions();    break;
+    case 'adminSpecialties': $adminCtrl->getSpecialties(); break;
+
+    // Paciente
+    case 'getAppointmentsByPatient': $patientCtrl->getByPatient();      break;
+    case 'patientStats':             $patientCtrl->getStatsByPatient(); break;
+    case 'cancelAppointment':        $patientCtrl->cancelByPatient();   break;
+    case 'createAppointment':        $patientCtrl->create();            break;
+    case 'updatePatient':            $patientCtrl->updateProfile();     break;
+    case 'deletePatient':            $patientCtrl->deleteAccount();     break;
+
+    // Doctor
+    case 'doctorAppointments':      $doctorCtrl->getAppointments();         break;
+    case 'doctorToday':             $doctorCtrl->getTodayAppointments();    break;
+    case 'doctorWeeklyAgenda':      $doctorCtrl->getWeeklyAgenda();         break;
+    case 'doctorStats':             $doctorCtrl->getStats();                break;
+    case 'doctorSchedules':         $doctorCtrl->getSchedules();            break;
+    case 'doctorUpdateAppointment': $doctorCtrl->updateAppointmentStatus(); break;
+    case 'doctorRequestSchedule':   $doctorCtrl->requestScheduleChange();   break;
+    case 'doctorUpdateProfile':     $doctorCtrl->updateProfile();           break;
+    case 'doctorProfile':           $doctorCtrl->getProfile();              break;
 
     default:
         http_response_code(404);
-        echo json_encode(["status" => "error", "message" => "Acción '$action' no encontrada"]);
+        echo json_encode(["status" => "error", "message" => "Acción '$action' no encontrada."]);
         break;
 }

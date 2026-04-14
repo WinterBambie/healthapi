@@ -1,5 +1,4 @@
 <?php
-// Centraliza la conexión y las respuestas para todos los controladores
 require_once __DIR__ . '/database.php';
 
 class BaseController {
@@ -10,13 +9,20 @@ class BaseController {
         $this->conn = $db->connect();
     }
 
-    // Método estándar para responder a React
+    // Respuesta JSON estándar
     protected function response($status, $message, $data = null) {
         echo json_encode([
-            "status" => $status,
+            "status"  => $status,
             "message" => $message,
-            "data" => $data
+            "data"    => $data,
         ]);
         exit;
+    }
+
+    // Lee FormData ($_POST) o JSON del body
+    protected function input(): array {
+        if (!empty($_POST)) return $_POST;
+        $raw = file_get_contents('php://input');
+        return json_decode($raw, true) ?? [];
     }
 }

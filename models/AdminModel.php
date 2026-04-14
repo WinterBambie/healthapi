@@ -9,31 +9,31 @@ class AdminModel {
     // ── Stats ─────────────────────────────────────────────────────────────────
 
     public function getTotalPatients() {
-        return $this->conn->query("SELECT COUNT(*) FROM patient")->fetchColumn();
+        return (int)$this->conn->query("SELECT COUNT(*) FROM patient")->fetchColumn();
     }
 
     public function getTotalDoctors() {
-        return $this->conn->query("SELECT COUNT(*) FROM doctor")->fetchColumn();
+        return (int)$this->conn->query("SELECT COUNT(*) FROM doctor")->fetchColumn();
     }
 
     public function getAppointmentsToday() {
-        return $this->conn->query(
+        return (int)$this->conn->query(
             "SELECT COUNT(*) FROM appointment
              WHERE appointment_date = CURDATE() AND status != 'cancelada'"
         )->fetchColumn();
     }
 
     public function getAppointmentsThisMonth() {
-        return $this->conn->query(
+        return (int)$this->conn->query(
             "SELECT COUNT(*) FROM appointment
              WHERE MONTH(appointment_date) = MONTH(CURDATE())
-             AND YEAR(appointment_date) = YEAR(CURDATE())
-             AND status != 'cancelada'"
+               AND YEAR(appointment_date)  = YEAR(CURDATE())
+               AND status != 'cancelada'"
         )->fetchColumn();
     }
 
     public function getAppointmentsReserved() {
-        return $this->conn->query(
+        return (int)$this->conn->query(
             "SELECT COUNT(*) FROM appointment WHERE status = 'reservada'"
         )->fetchColumn();
     }
@@ -42,16 +42,16 @@ class AdminModel {
 
     public function getAllPatients() {
         return $this->conn->query(
-            "SELECT pid, pname, pemail, pphone, paddress, pbirthdate FROM patient ORDER BY pname"
-        )->fetchAll(PDO::FETCH_ASSOC);
+            "SELECT pid, pname, pemail, pphone, paddress, pbirthdate
+             FROM patient ORDER BY pname"
+        )->fetchAll();
     }
 
     public function updatePatient($pid, $data) {
         try {
-            $stmt = $this->conn->prepare(
+            $this->conn->prepare(
                 "UPDATE patient SET pname=?, pemail=?, pphone=?, paddress=? WHERE pid=?"
-            );
-            $stmt->execute([$data['pname'], $data['pemail'], $data['pphone'], $data['paddress'], $pid]);
+            )->execute([$data['pname'], $data['pemail'], $data['pphone'], $data['paddress'], $pid]);
             return ["status" => "success", "message" => "Paciente actualizado correctamente."];
         } catch (Exception $e) {
             return ["status" => "error", "message" => $e->getMessage()];
@@ -60,9 +60,14 @@ class AdminModel {
 
     public function deletePatient($pid) {
         try {
-            $this->conn->prepare("DELETE FROM appointment WHERE pid=?")->execute([$pid]);
-            $this->conn->prepare("DELETE FROM webuser WHERE email=(SELECT pemail FROM patient WHERE pid=?)")->execute([$pid]);
-            $this->conn->prepare("DELETE FROM patient WHERE pid=?")->execute([$pid]);
+            $this->conn->prepare("DELETE FROM appointment WHERE pid = ?")->execute([$pid]);
+            $email = $this->conn->prepare("SELECT pemail FROM patient WHERE pid = ?");
+            $email->execute([$pid]);
+            $pemail = $email->fetchColumn();
+            if ($pemail) {
+                $this->conn->prepare("DELETE FROM webuser WHERE email = ?")->execute([$pemail]);
+            }
+            $this->conn->prepare("DELETE FROM patient WHERE pid = ?")->execute([$pid]);
             return ["status" => "success", "message" => "Paciente eliminado correctamente."];
         } catch (Exception $e) {
             return ["status" => "error", "message" => $e->getMessage()];
@@ -78,66 +83,36 @@ class AdminModel {
              FROM doctor d
              LEFT JOIN specialties s ON s.id = d.specialty_id
              ORDER BY d.dname"
-        )->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function updateDoctor($docid, $data) {
-        try {
-            $stmt = $this->conn->prepare(
-                "UPDATE doctor SET dname=?, demail=?, dphone=? WHERE docid=?"
-            );
-            $stmt->execute([$data['dname'], $data['demail'], $data['dphone'], $docid]);
-            return ["status" => "success", "message" => "Doctor actualizado correctamente."];
-        } catch (Exception $e) {
-            return ["status" => "error", "message" => $e->getMessage()];
-        }
-    }
-
-    public function deleteDoctor($docid) {
-        try {
-            $this->conn->beginTransaction();
-            $email = $this->conn->prepare("SELECT demail FROM doctor WHERE docid=?");
-            $email->execute([$docid]);
-            $demail = $email->fetchColumn();
-
-            $this->conn->prepare(
-                "DELETE a FROM appointment a
-                 JOIN doctor_schedule ds ON ds.scheduleid = a.scheduleid
-                 WHERE ds.docid=?"
-            )->execute([$docid]);
-            $this->conn->prepare("DELETE FROM doctor_schedule WHERE docid=?")->execute([$docid]);
-            $this->conn->prepare("DELETE FROM webuser WHERE email=?")->execute([$demail]);
-            $this->conn->prepare("DELETE FROM doctor WHERE docid=?")->execute([$docid]);
-
-            $this->conn->commit();
-            return ["status" => "success", "message" => "Doctor eliminado correctamente."];
-        } catch (Exception $e) {
-            $this->conn->rollBack();
-            return ["status" => "error", "message" => $e->getMessage()];
-        }
+        )->fetchAll();
     }
 
     public function createDoctor($dname, $demail, $dpassword, $dphone, $ddocument, $tipo_documento_id, $specialty_name) {
         try {
             $this->conn->beginTransaction();
+
+            // Verificar email duplicado
+            $ck = $this->conn->prepare("SELECT COUNT(*) FROM webuser WHERE email = ?");
+            $ck->execute([$demail]);
+            if ($ck->fetchColumn() > 0) {
+                $this->conn->rollBack();
+                return ["status" => "error", "message" => "El correo ya está registrado."];
+            }
+
             $hash = password_hash($dpassword, PASSWORD_DEFAULT);
 
-            $specStmt = $this->conn->prepare("SELECT id FROM specialties WHERE name=?");
-            $specStmt->execute([$specialty_name]);
-            $spec = $specStmt->fetch(PDO::FETCH_ASSOC);
-
-            if ($spec) {
-                $specialty_id = $spec['id'];
-            } else {
-                $ins = $this->conn->prepare("INSERT INTO specialties (name) VALUES (?)");
-                $ins->execute([$specialty_name]);
-                $specialty_id = $this->conn->lastInsertId();
+            // Especialidad: buscar o crear
+            $sp = $this->conn->prepare("SELECT id FROM specialties WHERE name = ?");
+            $sp->execute([$specialty_name]);
+            $spec = $sp->fetchColumn();
+            if (!$spec) {
+                $this->conn->prepare("INSERT INTO specialties (name) VALUES (?)")->execute([$specialty_name]);
+                $spec = $this->conn->lastInsertId();
             }
 
             $this->conn->prepare(
                 "INSERT INTO doctor (dname, demail, dpassword, dphone, ddocument, tipo_documento_id, specialty_id)
                  VALUES (?, ?, ?, ?, ?, ?, ?)"
-            )->execute([$dname, $demail, $hash, $dphone, $ddocument, $tipo_documento_id, $specialty_id]);
+            )->execute([$dname, $demail, $hash, $dphone, $ddocument, $tipo_documento_id, $spec]);
 
             $this->conn->prepare(
                 "INSERT INTO webuser (email, password, usertype) VALUES (?, ?, 'd')"
@@ -145,6 +120,63 @@ class AdminModel {
 
             $this->conn->commit();
             return ["status" => "success", "message" => "Doctor registrado correctamente."];
+        } catch (Exception $e) {
+            $this->conn->rollBack();
+            return ["status" => "error", "message" => $e->getMessage()];
+        }
+    }
+
+public function updateDoctor($docid, $data) {
+    try {
+
+        if (!$docid) {
+            return ["status" => "error", "message" => "docid requerido"];
+        }
+
+        $dname  = $data['dname']  ?? '';
+        $demail = $data['demail'] ?? '';
+        $dphone = $data['dphone'] ?? '';
+
+        if ($dname === '' || $demail === '') {
+            return ["status" => "error", "message" => "Datos incompletos"];
+        }
+
+        $stmt = $this->conn->prepare(
+            "UPDATE doctor SET dname = ?, demail = ?, dphone = ? WHERE docid = ?"
+        );
+
+        $stmt->execute([$dname, $demail, $dphone, $docid]);
+
+        return ["status" => "success", "message" => "Doctor actualizado correctamente."];
+
+    } catch (Exception $e) {
+        return ["status" => "error", "message" => $e->getMessage()];
+    }
+}
+
+    public function deleteDoctor($docid) {
+        try {
+            $this->conn->beginTransaction();
+
+            $em = $this->conn->prepare("SELECT demail FROM doctor WHERE docid = ?");
+            $em->execute([$docid]);
+            $demail = $em->fetchColumn();
+
+            // Eliminar citas de los horarios del doctor
+            $this->conn->prepare(
+                "DELETE a FROM appointment a
+                 JOIN doctor_schedule ds ON ds.scheduleid = a.scheduleid
+                 WHERE ds.docid = ?"
+            )->execute([$docid]);
+
+            $this->conn->prepare("DELETE FROM doctor_schedule WHERE docid = ?")->execute([$docid]);
+            if ($demail) {
+                $this->conn->prepare("DELETE FROM webuser WHERE email = ?")->execute([$demail]);
+            }
+            $this->conn->prepare("DELETE FROM doctor WHERE docid = ?")->execute([$docid]);
+
+            $this->conn->commit();
+            return ["status" => "success", "message" => "Doctor eliminado correctamente."];
         } catch (Exception $e) {
             $this->conn->rollBack();
             return ["status" => "error", "message" => $e->getMessage()];
@@ -164,7 +196,7 @@ class AdminModel {
              JOIN doctor d ON d.docid = ds.docid
              LEFT JOIN session s ON s.sessionid = ds.sessionid
              ORDER BY a.appointment_date DESC, a.appointment_time ASC"
-        )->fetchAll(PDO::FETCH_ASSOC);
+        )->fetchAll();
     }
 
     public function updateAppointmentStatus($appoid, $status) {
@@ -174,7 +206,7 @@ class AdminModel {
         }
         try {
             $this->conn->prepare(
-                "UPDATE appointment SET status=? WHERE appoid=?"
+                "UPDATE appointment SET status = ? WHERE appoid = ?"
             )->execute([$status, $appoid]);
             return ["status" => "success", "message" => "Estado actualizado."];
         } catch (Exception $e) {
@@ -184,14 +216,14 @@ class AdminModel {
 
     public function deleteAppointment($appoid) {
         try {
-            $this->conn->prepare("DELETE FROM appointment WHERE appoid=?")->execute([$appoid]);
+            $this->conn->prepare("DELETE FROM appointment WHERE appoid = ?")->execute([$appoid]);
             return ["status" => "success", "message" => "Cita eliminada."];
         } catch (Exception $e) {
             return ["status" => "error", "message" => $e->getMessage()];
         }
     }
 
-    // ── Horarios (doctor_schedule) ────────────────────────────────────────────
+    // ── Horarios ──────────────────────────────────────────────────────────────
 
     public function getAllSchedules() {
         return $this->conn->query(
@@ -201,56 +233,56 @@ class AdminModel {
                     ds.slot_duration_min, ds.max_patients_per_day, ds.is_active,
                     (SELECT COUNT(*) FROM appointment a
                      WHERE a.scheduleid = ds.scheduleid
-                     AND a.appointment_date = CURDATE()
-                     AND a.status != 'cancelada') AS reserved_today
+                       AND a.appointment_date = CURDATE()
+                       AND a.status != 'cancelada') AS reserved_today
              FROM doctor_schedule ds
              JOIN doctor d ON d.docid = ds.docid
              LEFT JOIN session s ON s.sessionid = ds.sessionid
              ORDER BY d.dname, ds.day_of_week, ds.start_time"
-        )->fetchAll(PDO::FETCH_ASSOC);
+        )->fetchAll();
     }
 
     public function getAvailableSlots($scheduleid, $date) {
         $stmt = $this->conn->prepare(
-            "SELECT ds.start_time, ds.end_time, ds.slot_duration_min, ds.max_patients_per_day,
-                    ds.docid
-             FROM doctor_schedule ds WHERE ds.scheduleid=?"
+            "SELECT start_time, end_time, slot_duration_min FROM doctor_schedule WHERE scheduleid = ?"
         );
         $stmt->execute([$scheduleid]);
-        $schedule = $stmt->fetch(PDO::FETCH_ASSOC);
+        $schedule = $stmt->fetch();
         if (!$schedule) return [];
 
-        // Generar todos los slots del horario
+        // Generar todos los slots
         $slots   = [];
         $current = strtotime($date . ' ' . $schedule['start_time']);
         $end     = strtotime($date . ' ' . $schedule['end_time']);
-        $duration = (int)$schedule['slot_duration_min'];
+        $dur     = (int)$schedule['slot_duration_min'] * 60;
 
-        while ($current + ($duration * 60) <= $end) {
+        while ($current + $dur <= $end) {
             $slots[] = date('H:i', $current);
-            $current += $duration * 60;
+            $current += $dur;
         }
 
-        // Quitar slots ya reservados ese día
+        // Quitar los ya reservados
         $taken = $this->conn->prepare(
             "SELECT appointment_time FROM appointment
-             WHERE scheduleid=? AND appointment_date=? AND status != 'cancelada'"
+             WHERE scheduleid = ? AND appointment_date = ? AND status != 'cancelada'"
         );
         $taken->execute([$scheduleid, $date]);
         $takenTimes = $taken->fetchAll(PDO::FETCH_COLUMN);
 
-        return array_values(array_filter($slots, fn($s) => !in_array($s . ':00', $takenTimes)));
+        // appointment_time viene como HH:MM:SS — normalizar a HH:MM
+        $takenNorm = array_map(fn($t) => substr($t, 0, 5), $takenTimes);
+
+        return array_values(array_filter($slots, fn($s) => !in_array($s, $takenNorm)));
     }
 
     public function createSchedule($docid, $sessionid, $day_of_week, $start_time, $end_time, $slot_duration_min, $max_patients_per_day) {
         try {
-            // Verificar que no exista ya ese horario para ese doctor y día
-            $check = $this->conn->prepare(
+            $ck = $this->conn->prepare(
                 "SELECT COUNT(*) FROM doctor_schedule
-                 WHERE docid=? AND day_of_week=? AND is_active=1"
+                 WHERE docid = ? AND day_of_week = ? AND is_active = 1"
             );
-            $check->execute([$docid, $day_of_week]);
-            if ($check->fetchColumn() > 0) {
+            $ck->execute([$docid, $day_of_week]);
+            if ($ck->fetchColumn() > 0) {
                 return ["status" => "error", "message" => "El doctor ya tiene un horario activo ese día."];
             }
 
@@ -277,7 +309,8 @@ class AdminModel {
                 $data['sessionid'], $data['day_of_week'],
                 $data['start_time'], $data['end_time'],
                 $data['slot_duration_min'], $data['max_patients_per_day'],
-                $data['is_active'], $scheduleid
+                $data['is_active'] ?? 1,
+                $scheduleid,
             ]);
             return ["status" => "success", "message" => "Horario actualizado correctamente."];
         } catch (Exception $e) {
@@ -287,8 +320,8 @@ class AdminModel {
 
     public function deleteSchedule($scheduleid) {
         try {
-            $this->conn->prepare("DELETE FROM appointment WHERE scheduleid=?")->execute([$scheduleid]);
-            $this->conn->prepare("DELETE FROM doctor_schedule WHERE scheduleid=?")->execute([$scheduleid]);
+            $this->conn->prepare("DELETE FROM appointment WHERE scheduleid = ?")->execute([$scheduleid]);
+            $this->conn->prepare("DELETE FROM doctor_schedule WHERE scheduleid = ?")->execute([$scheduleid]);
             return ["status" => "success", "message" => "Horario eliminado."];
         } catch (Exception $e) {
             return ["status" => "error", "message" => $e->getMessage()];
@@ -299,13 +332,13 @@ class AdminModel {
 
     public function getAllSessions() {
         return $this->conn->query(
-            "SELECT sessionid as id, title FROM session ORDER BY title"
-        )->fetchAll(PDO::FETCH_ASSOC);
+            "SELECT sessionid AS id, title FROM session ORDER BY title"
+        )->fetchAll();
     }
 
     public function getSpecialties() {
         return $this->conn->query(
             "SELECT id, name FROM specialties ORDER BY name"
-        )->fetchAll(PDO::FETCH_ASSOC);
+        )->fetchAll();
     }
 }

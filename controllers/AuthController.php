@@ -1,117 +1,118 @@
 <?php
 require_once __DIR__ . '/../config/JwtHelper.php';
+require_once __DIR__ . '/../config/BaseController.php';
 
-class AuthController {
-    private $conn;
-
-    public function __construct() {
-        $database = new Database();
-        $this->conn = $database->connect();
-    }
+class AuthController extends BaseController {
 
     public function login() {
-        $input    = json_decode(file_get_contents('php://input'), true) ?? [];
-        $email    = $input['email']    ?? $_POST['email']    ?? '';
-        $password = $input['password'] ?? $_POST['password'] ?? '';
+        $d     = $this->input();
+        $email = trim($d['email']    ?? '');
+        $pass  = trim($d['password'] ?? '');
 
-        $stmt = $this->conn->prepare("SELECT usertype, password FROM webuser WHERE email=?");
+        if (!$email || !$pass) {
+            $this->response("error", "Correo y contraseña son obligatorios.");
+        }
+
+        $stmt = $this->conn->prepare("SELECT usertype, password FROM webuser WHERE email = ?");
         $stmt->execute([$email]);
-        $res = $stmt->fetch(PDO::FETCH_ASSOC);
+        $wu = $stmt->fetch();
 
-        if (!$res) {
-            echo json_encode(["status" => "error", "message" => "Usuario no registrado"]);
-            return;
+        if (!$wu) {
+            $this->response("error", "Usuario no registrado.");
+        }
+        if (!password_verify($pass, $wu['password'])) {
+            $this->response("error", "Contraseña incorrecta.");
         }
 
-        if (!password_verify($password, $res['password'])) {
-            echo json_encode(["status" => "error", "message" => "Contraseña incorrecta"]);
-            return;
-        }
-
-        $type = $res['usertype'];
+        $type = $wu['usertype']; // 'p' | 'd' | 'a'
 
         if ($type === 'p') {
-            $stmt2 = $this->conn->prepare("SELECT pid as id, pname as name FROM patient WHERE pemail=?");
+            $s = $this->conn->prepare(
+                "SELECT pid AS id, pname AS name, pemail AS email, pphone AS phone, paddress AS address
+                 FROM patient WHERE pemail = ?"
+            );
         } elseif ($type === 'd') {
-            $stmt2 = $this->conn->prepare("SELECT docid as id, dname as name FROM doctor WHERE demail=?");
+            $s = $this->conn->prepare(
+                "SELECT docid AS id, dname AS name, demail AS email, dphone AS phone
+                 FROM doctor WHERE demail = ?"
+            );
         } else {
-            $stmt2 = $this->conn->prepare("SELECT email as id, email as name FROM admin WHERE email=?");
+            $s = $this->conn->prepare(
+                "SELECT email AS id, email AS name FROM webuser WHERE email = ?"
+            );
         }
+        $s->execute([$email]);
+        $user = $s->fetch();
 
-        $stmt2->execute([$email]);
-        $userData = $stmt2->fetch(PDO::FETCH_ASSOC);
+        $roleMap = ['p' => 'patient', 'd' => 'doctor', 'a' => 'admin'];
+        $role    = $roleMap[$type] ?? 'patient';
 
-        $typeMap = ['p' => 'patient', 'd' => 'doctor', 'a' => 'admin'];
-        $role    = $typeMap[$type];
-
-        // ✅ Generar JWT con id, email y rol
         $token = JwtHelper::generate([
-            'sub'   => $userData['id'] ?? $email,
+            'sub'   => $user['id'] ?? $email,
             'email' => $email,
             'role'  => $role,
             'iat'   => time(),
-            'exp'   => time() + (60 * 60 * 8), // 8 horas
+            'exp'   => time() + (60 * 60 * 8),
         ]);
 
-        echo json_encode([
-            "status" => "success",
-            "type"   => $role,
-            "token"  => $token,
-            "user"   => [
-                "id"    => $userData['id']   ?? $email,
-                "name"  => $userData['name'] ?? $email,
-                "email" => $email,
-            ]
+        $this->response("success", "Login exitoso.", [
+            "type"  => $role,
+            "token" => $token,
+            "user"  => [
+                "id"      => $user['id']      ?? $email,
+                "name"    => $user['name']    ?? $email,
+                "email"   => $user['email']   ?? $email,
+                "phone"   => $user['phone']   ?? "",
+                "address" => $user['address'] ?? "",
+            ],
         ]);
     }
 
     public function registerPatient() {
-        $fname   = $_POST['fname']   ?? '';
-        $lname   = $_POST['lname']   ?? '';
-        $name    = trim($fname . ' ' . $lname);
-        $email   = $_POST['email']   ?? '';
-        $password= $_POST['password']?? '';
-        $address = $_POST['address'] ?? '';
-        $nic     = $_POST['nic']     ?? '';
-        $dob     = $_POST['dob']     ?? '';
-        $phone   = $_POST['phone']   ?? '';
-        $typeDoc = $_POST['tipo_documento_id'] ?? null;
+        $fname   = $_POST['fname']              ?? '';
+        $lname   = $_POST['lname']              ?? '';
+        $name    = trim("$fname $lname");
+        $email   = trim($_POST['email']         ?? '');
+        $pass    = $_POST['password']           ?? '';
+        $address = $_POST['address']            ?? '';
+        $nic     = $_POST['nic']                ?? '';
+        $dob     = $_POST['dob']                ?? '';
+        $phone   = $_POST['phone']              ?? '';
+        $typeDoc = $_POST['tipo_documento_id']  ?? null;
 
-        if (!$email || !$password || !$nic) {
-            echo json_encode(["status" => "error", "message" => "Faltan campos"]);
-            return;
+        if (!$email || !$pass || !$nic) {
+            $this->response("error", "Faltan campos obligatorios.");
         }
 
-        $check = $this->conn->prepare("SELECT email FROM webuser WHERE email=?");
+        $check = $this->conn->prepare("SELECT email FROM webuser WHERE email = ?");
         $check->execute([$email]);
         if ($check->fetch()) {
-            echo json_encode(["status" => "error", "message" => "Correo ya registrado"]);
-            return;
+            $this->response("error", "Correo ya registrado.");
         }
 
         try {
             $this->conn->beginTransaction();
-            $hash = password_hash($password, PASSWORD_DEFAULT);
+            $hash = password_hash($pass, PASSWORD_DEFAULT);
 
             $this->conn->prepare(
                 "INSERT INTO patient (pemail,pname,ppassword,paddress,pdocument,pbirthdate,pphone,tipo_documento_id)
                  VALUES (?,?,?,?,?,?,?,?)"
-            )->execute([$email,$name,$hash,$address,$nic,$dob,$phone,$typeDoc]);
+            )->execute([$email, $name, $hash, $address, $nic, $dob, $phone, $typeDoc]);
 
             $this->conn->prepare(
-                "INSERT INTO webuser (email,password,usertype) VALUES (?,?,'p')"
-            )->execute([$email,$hash]);
+                "INSERT INTO webuser (email, password, usertype) VALUES (?, ?, 'p')"
+            )->execute([$email, $hash]);
 
             $this->conn->commit();
-            echo json_encode(["status" => "success", "message" => "Registro exitoso"]);
+            $this->response("success", "Registro exitoso.");
         } catch (Exception $e) {
             $this->conn->rollBack();
-            echo json_encode(["status" => "error", "message" => $e->getMessage()]);
+            $this->response("error", $e->getMessage());
         }
     }
 
     public function getDocumentTypes() {
-        $stmt = $this->conn->query("SELECT id, nombre FROM tipo_documento ORDER BY nombre");
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $rows = $this->conn->query("SELECT id, nombre FROM tipo_documento ORDER BY nombre")->fetchAll();
+        $this->response("success", "Tipos de documento.", $rows);
     }
 }
