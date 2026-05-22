@@ -1,7 +1,4 @@
 <?php
-// Suprimir warnings/notices para que no contaminen el JSON
-error_reporting(0);
-ini_set('display_errors', '0');
 
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
@@ -13,6 +10,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
+$action        = $_GET['action'] ?? '';
+$publicActions = ['login', 'register', 'documentTypes', 'forgotPassword', 'resetPassword', 'validateResetToken'];
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/BaseController.php';
@@ -21,9 +20,8 @@ require_once __DIR__ . '/../controllers/AuthController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
 require_once __DIR__ . '/../controllers/PatientController.php';
 require_once __DIR__ . '/../controllers/DoctorController.php';
-
-$action        = $_GET['action'] ?? '';
-$publicActions = ['login', 'register', 'documentTypes'];
+require_once __DIR__ . '/../controllers/PasswordResetController.php';
+require_once __DIR__ . '/../controllers/HistoriaClinicaController.php';
 
 // ── Autenticación ─────────────────────────────────────────────────────────────
 if (!in_array($action, $publicActions)) {
@@ -50,6 +48,8 @@ $authCtrl    = new AuthController();
 $adminCtrl   = new AdminController();
 $patientCtrl = new PatientController();
 $doctorCtrl  = new DoctorController();
+$resetCtrl = new PasswordResetController();
+$hcCtrl = new HistoriaClinicaController();
 
 // ── Rutas ─────────────────────────────────────────────────────────────────────
 switch ($action) {
@@ -106,7 +106,15 @@ switch ($action) {
     case 'doctorRequestSchedule':   $doctorCtrl->requestScheduleChange();   break;
     case 'doctorUpdateProfile':     $doctorCtrl->updateProfile();           break;
     case 'doctorProfile':           $doctorCtrl->getProfile();              break;
-
+    case 'forgotPassword':      $resetCtrl->forgotPassword(); break;
+    case 'resetPassword':       $resetCtrl->resetPassword();  break;
+    case 'validateResetToken':  $resetCtrl->validateToken();  break;
+    //HISTORIA CLÍNICA
+    case 'hcPacientes':      $hcCtrl->getPacientes();    break;
+    case 'hcGet':            $hcCtrl->getHistoria();     break;
+    case 'hcCrearRegistro':  $hcCtrl->crearRegistro();   break;
+    case 'hcAnularRegistro': $hcCtrl->anularRegistro();  break;
+//nomax65539@pmdeal.com
     default:
         http_response_code(404);
         echo json_encode(["status" => "error", "message" => "Acción '$action' no encontrada."]);
