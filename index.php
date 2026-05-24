@@ -1,3 +1,8 @@
 <?php
-require_once __DIR__ . '/router/api.php';
-echo "funcionando";
+
+header("Content-Type: application/json");
+
+echo json_encode([
+    "app" => "SoftyHealth API",
+    "status" => "online"
+]);
