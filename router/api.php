@@ -25,7 +25,7 @@ require_once $base . '/../controllers/AuthController.php';
 require_once $base . '/../controllers/AdminController.php';
 require_once $base . '/../controllers/PatientController.php';
 require_once $base . '/../controllers/DoctorController.php';
-require_once $base . '/../controllers/PasswordResetController.php';
+require_once $base . '/../controllers/PasswordresetController.php';
 require_once $base . '/../controllers/HistoriaClinicaController.php';
 
 $action        = $_GET['action'] ?? '';
