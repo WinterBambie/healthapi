@@ -26,7 +26,7 @@ require_once $base . '/../controllers/AdminController.php';
 require_once $base . '/../controllers/PatientController.php';
 require_once $base . '/../controllers/DoctorController.php';
 require_once $base . '/../controllers/PasswordresetController.php';
-require_once $base . '/../controllers/HistoriaClinicaController.php';
+require_once $base . '/../controllers/HistoriaclinicaController.php';
 
 $action        = $_GET['action'] ?? '';
 $publicActions = ['login', 'register', 'documentTypes', 'forgotPassword', 'resetPassword', 'validateResetToken'];
