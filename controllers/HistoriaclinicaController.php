@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../models/HistoriaClinicaModel.php';
+require_once __DIR__ . '/../models/HistoriaclinicaModel.php';
 
 class HistoriaClinicaController extends BaseController {
     private $model;
