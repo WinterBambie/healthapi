@@ -1,16 +1,18 @@
 FROM php:8.2-apache
 
-# Instalar extensiones MySQL (ESTO ARREGLA TU ERROR)
+# SOLO instalar extensiones necesarias
 RUN docker-php-ext-install pdo pdo_mysql mysqli
 
-# Habilitar rewrite (API friendly)
+# Activar rewrite
 RUN a2enmod rewrite
 
-# Copiar proyecto
+# 🔴 IMPORTANTE: desactivar MPM conflictivo
+RUN a2dismod mpm_event || true
+RUN a2dismod mpm_worker || true
+RUN a2enmod mpm_prefork
+
 COPY . /var/www/html/
 
-# Permisos
 RUN chown -R www-data:www-data /var/www/html
 
-# Puerto Apache
 EXPOSE 80
