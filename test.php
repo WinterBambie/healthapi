@@ -9,6 +9,8 @@ try {
         "GejrRXAHOyNbLyiCYtwmSpYssenQyJrV"
     );
 
+    
+
     $stmt = $conn->query("SHOW TABLES");
 
     while($row = $stmt->fetch()) {
@@ -17,6 +19,8 @@ try {
     }
 
 } catch(PDOException $e) {
+    var_dump(PDO::getAvailableDrivers());
+exit;
 
     echo $e->getMessage();
 }
