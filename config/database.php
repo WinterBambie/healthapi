@@ -1,32 +1,23 @@
 <?php
-
 class Database {
-
-    private $host = "kodama.proxy.rlwy.net";
-    private $db   = "railway";
+    private $host = "localhost";
+    private $db   = "edoc_actualizado";
     private $user = "root";
-    private $pass = "GejrRXAHOyNbLyiCYtwmSpYssenQyJrV";
-    private $port = "27960";
-
-    public $conn;
+    private $pass = "";
 
     public function connect() {
-
         try {
-
-            $this->conn = new PDO(
-                "mysql:host={$this->host};port={$this->port};dbname={$this->db};charset=utf8mb4",
+            $conn = new PDO(
+                "mysql:host={$this->host};dbname={$this->db};charset=utf8",
                 $this->user,
                 $this->pass
             );
-
-            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-            return $this->conn;
-
-        } catch(PDOException $e) {
-
-            die("Connection failed: " . $e->getMessage());
+            $conn->setAttribute(PDO::ATTR_ERRMODE,        PDO::ERRMODE_EXCEPTION);
+            $conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+            return $conn;
+        } catch (PDOException $e) {
+            echo json_encode(["status" => "error", "message" => $e->getMessage()]);
+            exit;
         }
     }
 }
