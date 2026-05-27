@@ -1,6 +1,4 @@
 <?php
 
 
-
-var_dump(PDO::getAvailableDrivers());
-exit;
+require_once __DIR__ . '/router/api.php';
