@@ -1,16 +1,16 @@
 <?php
 class Database {
     private $host;
+    private $port;
     private $db;
     private $user;
     private $pass;
-    private $port;
 
     public function __construct() {
-        $this->host = getenv('MYSQLHOST') ?: 'localhost';
-        $this->port = getenv('MYSQLPORT') ?: '3306';
-        $this->db   = getenv('MYSQLDATABASE') ?: 'edoc_actualizado';
-        $this->user = getenv('MYSQLUSER') ?: 'root';
+        $this->host = getenv('MYSQLHOST')     ?: 'mysql.railway.internal';
+        $this->port = getenv('MYSQLPORT')     ?: '3306';
+        $this->db   = getenv('MYSQLDATABASE') ?: 'railway';
+        $this->user = getenv('MYSQLUSER')     ?: 'root';
         $this->pass = getenv('MYSQLPASSWORD') ?: '';
     }
 
