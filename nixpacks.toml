@@ -1,8 +1,5 @@
 [phases.setup]
-nixPkgs = ["php82", "php82Extensions.pdo_mysql", "php82Extensions.mysqli", "php82Extensions.mbstring", "php82Extensions.openssl"]
-
-[phases.build]
-cmds = []
+nixPkgs = ["php81", "php81Extensions.pdo_mysql", "php81Extensions.mysqli", "php81Extensions.mbstring", "php81Extensions.openssl"]
 
 [start]
 cmd = "php -S 0.0.0.0:$PORT -t router/"
